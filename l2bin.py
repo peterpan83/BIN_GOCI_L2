@@ -30,9 +30,14 @@ class Cbin():
         # self.LINES,self.PIXELS = 353,384
 
         filter = 'COMS*GA*l2'
-        self.l2files = glob.glob(os.path.join(l2dir,'2013',filter))
+        self.l2files = glob.glob(os.path.join(l2dir,"*",filter))
+        if len(self.l2files)==0:
+            print("don't find l2 files.....")
+            exit(-1)
+        print(self.l2files[0])
         data = gdal.Open(self.l2files[0])
         data_subds  = data.GetSubDatasets()
+        # print(len(data_subds))
 
         self.LINES, self.PIXELS = gdal.Open(data_subds[0][0]).ReadAsArray().shape
 
@@ -57,18 +62,19 @@ class Cbin():
         if year==None:
             year = "*"
         # files_stat = []
+        productName_sub = productName.split('/')[-1]
         for mon in self.MONTH:
             # l2files = glob.glob(os.path.join(self.l2dir,str(year),'COMS*%s%s*CONS.l2'%(year,mon)))
             # l2files = glob.glob(os.path.join(self.l2dir, str(year), 'COMS*%s%s*he5.l2' % (year, mon)))
             # l2files = glob.glob(os.path.join(self.l2dir, str(year), 'COMS*%s%s*adg.l2' % (year, mon)))
-            l2files = glob.glob(os.path.join(self.l2dir, str(year),'COMS*%s%s*sert.l2' % (year, mon)))
+            l2files = glob.glob(os.path.join(self.l2dir, str(year),'COMS*%s%s*%s.l2' % (year, mon,productName_sub)))
             print (mon,len(l2files))
             # files_stat.append([year,mon,len(l2files)])
             if len(l2files) == 0:
                 print('no data in %s %s!'%(year,mon))
                 continue
             values = self.process(l2files,productName,self.validRange)
-            values = cv2.blur(values,(5,5))
+            # values = cv2.blur(values,(5,5))
             if year=="*":
                 l2binfile = os.path.join(self.l2dir,'COMS%s%s_%s_bin.l2'%("2012-2016",mon,productName.split('/')[-1]))
             else:
@@ -120,7 +126,7 @@ class Cbin():
                 mon = str(mon).zfill(2)
 
                 files_m = glob.glob(os.path.join(self.l2dir,str(year),'COMS*%s%s_%s_bin.l2'%(year,mon,productName)))
-                if len(files) == 0:
+                if len(files_m) == 0:
                     print('no data in %s %s!'%(year,mon))
                     print(os.path.join(self.l2dir,'COMS*%s%s_%s_bin.l2'%(year,mon,productName)))
                     continue
@@ -198,16 +204,18 @@ class Cbin():
 
     def process(self,files,productName,validRange):
         index = np.zeros((self.LINES,self.PIXELS))
-        values = np.zeros((self.LINES,self.PIXELS))
+        values = np.zeros((self.LINES,self.PIXELS),np.float)
         for fl in files:
             f = h5py.File(fl)
             try:
                 value = f[productName].value
             except:
                 print(fl)
-            value[(value>validRange[1]) | (value<validRange[0])] = 0
+            value[np.isnan(value)] = 0
+            mask = (value>validRange[1]) | (value<validRange[0])
+            value[mask] = 0
             vc = value.copy()
-            vc[~((vc>validRange[1]) | (vc<validRange[0]))] = 1
+            vc[~mask] = 1
             index += vc
             values += value
             f.close()
@@ -259,7 +267,7 @@ class Cbin():
 if __name__ == '__main__':
 
     # 有效值范围，只有在此范围内的才bin,否则mask
-    validRange = [0,10]
+    validRange = [0,10000]
 
     # cbin = Cbin(l2dir='E:\\Data\\GOCI')
     # for year in ['2012','2013','2014','2015','2016']:
@@ -272,15 +280,15 @@ if __name__ == '__main__':
     # cbin.getYearAve(productName='adg_443')
 
 
-    cbin = Cbin(l2dir='E:\\GOCI L2')
-    # cbin.getMonthAve(year=2016,productName='POC/POC')
-    # cbin.getSeasonAve(year=2016, productName='POC')
+    cbin = Cbin(l2dir='D:\\Work\\Weixiaodao\\POC',validrange=validRange)
+    cbin.getMonthAve(year=2014,productName='POC/POC')
+    cbin.getSeasonAve(year=2014, productName='POC')
     #
     # cbin.getMonthAve(year=2016, productName='Chla/Chla-YOC')
     # cbin.getSeasonAve(year=2016, productName='Chla-YOC')
 
-    cbin.getMonthAve(year=2014, productName='SSC/SSC_SERT')
-    cbin.getSeasonAve(year=2014, productName='SSC_SERT')
+    # cbin.getMonthAve(year=2014, productName='SSC/SSC_SERT')
+    # cbin.getSeasonAve(year=2014, productName='SSC_SERT')
 
     # cbin.getAve(year='2015',filter='COMS*POC.l2',productName='Chla/Chla-YOC')
 
